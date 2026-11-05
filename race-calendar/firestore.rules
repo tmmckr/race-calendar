@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Jeder darf deine Events LESEN (öffentliche Seite).
+// Nur DU (deine UID) darfst schreiben.
+// → "DEINE_UID" ersetzen durch die UID aus Firebase → Authentication → Users.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner() {
+      return request.auth != null && request.auth.uid == "68Yyd9yPfyVnAKOMz9xFsqtWRjf1";
+    }
+
+    function validEvent() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 120
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.status in ['registered', 'wishlist']
+          && d.type is string;
+    }
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow create, update: if isOwner() && validEvent();
+      allow delete: if isOwner();
+    }
+
+    // Alles andere ist gesperrt
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

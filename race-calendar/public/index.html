@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Race Calendar</title>
+  <meta name="description" content="Meine Läufe, Marathons und Triathlons – angemeldet & auf der Wunschliste." />
+  <meta name="theme-color" content="#0b0d10" />
+  <meta property="og:title" content="Race Calendar" />
+  <meta property="og:description" content="Meine nächsten Rennen auf einen Blick." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0d10'/><text x='50' y='68' font-size='58' text-anchor='middle'>🏃</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner" hidden>
+    Demo-Modus – Daten werden nur lokal in deinem Browser gespeichert. Trage deine Firebase-Daten in <code>firebase-config.js</code> ein.
+  </div>
+
+  <header class="hero">
+    <div class="hero-lanes" aria-hidden="true"></div>
+    <div class="wrap hero-inner">
+      <p class="eyebrow" id="site-handle">@runner</p>
+      <h1 class="hero-title" id="site-name">Race Calendar</h1>
+      <p class="hero-tagline" id="site-tagline">Meine Rennen. Meine Ziele.</p>
+
+      <div class="next-race" id="next-race" hidden></div>
+
+      <div class="stats" id="stats"></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <nav class="tabs" id="tabs" role="tablist">
+        <button role="tab" data-filter="upcoming" class="active">Anstehend</button>
+        <button role="tab" data-filter="registered">Angemeldet</button>
+        <button role="tab" data-filter="wishlist">Wunschliste</button>
+        <button role="tab" data-filter="done">Absolviert</button>
+      </nav>
+      <div class="view-toggle" id="view-toggle">
+        <button data-view="list" class="active" aria-label="Listenansicht">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <button data-view="calendar" aria-label="Kalenderansicht">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <section id="list-view"></section>
+    <section id="calendar-view" hidden></section>
+  </main>
+
+  <button class="fab" id="add-btn" hidden aria-label="Event hinzufügen">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    <span>Event</span>
+  </button>
+
+  <footer class="wrap footer">
+    <span id="footer-name">Race Calendar</span>
+    <span class="footer-right">
+      <span id="admin-info"></span>
+      <button class="link-btn" id="auth-btn" aria-label="Admin-Login">
+        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+    </span>
+  </footer>
+
+  <!-- Formular: Event anlegen / bearbeiten -->
+  <dialog id="event-dialog" class="sheet">
+    <form id="event-form" method="dialog">
+      <div class="sheet-head">
+        <h2 id="form-title">Neues Event</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Schließen">✕</button>
+      </div>
+
+      <label>Name des Events
+        <input name="name" required maxlength="120" placeholder="z. B. Hamburg Marathon" />
+      </label>
+
+      <div class="row">
+        <label>Datum
+          <input name="date" type="date" required />
+        </label>
+        <label>Art
+          <select name="type" id="type-select"></select>
+        </label>
+      </div>
+
+      <fieldset class="seg">
+        <legend>Status</legend>
+        <label><input type="radio" name="status" value="registered" checked /><span>✅ Angemeldet</span></label>
+        <label><input type="radio" name="status" value="wishlist" /><span>⭐ Wunschliste</span></label>
+      </fieldset>
+
+      <div class="row">
+        <label>Ort
+          <input name="location" maxlength="100" placeholder="z. B. Hamburg" />
+        </label>
+        <label>Distanz (km, optional)
+          <input name="distance" type="number" step="0.001" min="0" placeholder="automatisch" />
+        </label>
+      </div>
+
+      <label>Link zum Event
+        <input name="url" type="url" placeholder="https://…" />
+      </label>
+
+      <label>Ergebnis / Zielzeit
+        <input name="result" maxlength="40" placeholder="z. B. 1:45:12 oder Ziel: Sub 4" />
+      </label>
+
+      <label>Notiz
+        <textarea name="notes" rows="2" maxlength="300" placeholder="Startnummer, Startwelle, Ziel …"></textarea>
+      </label>
+
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost danger" id="delete-btn" hidden>Löschen</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Abbrechen</button>
+        <button type="submit" class="btn primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Login (nur für dich) -->
+  <dialog id="login-dialog" class="sheet">
+    <form id="login-form" method="dialog">
+      <div class="sheet-head">
+        <h2>Login</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Schließen">✕</button>
+      </div>
+      <label>E-Mail
+        <input name="email" type="email" autocomplete="username" required />
+      </label>
+      <label>Passwort
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <div class="sheet-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Abbrechen</button>
+        <button type="submit" class="btn primary">Einloggen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Detailansicht -->
+  <dialog id="detail-dialog" class="sheet">
+    <div id="detail-body"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
