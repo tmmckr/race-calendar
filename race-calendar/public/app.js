@@ -170,7 +170,7 @@ function renderHero() {
     : "";
   $("#site-name").textContent = SITE.name;
   $("#site-tagline").textContent = SITE.tagline;
-  $("#footer-name").textContent = `© ${today().getFullYear()} ${SITE.name}`;
+  $("#footer-name").textContent = `© ${today().getFullYear()} ${SITE.name} made by Timo Maecker`;
   document.title = SITE.name;
 
   const upcomingReg = state.events
