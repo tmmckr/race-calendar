@@ -21,7 +21,15 @@ const TYPES = {
   "other":      { label: "Sonstiges",     km: null },
 };
 
-const STATUS_LABEL = { registered: "Angemeldet", wishlist: "Wunschliste", done: "Absolviert" };
+const PB_DISTANCES = [
+  { key: "5k",  label: "5K" },
+  { key: "10k", label: "10K" },
+  { key: "21k", label: "21K", sub: "Halbmarathon" },
+  { key: "42k", label: "42K", sub: "Marathon" },
+  { key: "50k", label: "50K", sub: "Ultra" },
+];
+
+const STATUS_LABEL ={ registered: "Angemeldet", wishlist: "Wunschliste", done: "Absolviert" };
 
 const fmtMonth = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const fmtMonShort = new Intl.DateTimeFormat("de-DE", { month: "short" });
@@ -33,6 +41,7 @@ const fmtLong = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeri
    ============================================================ */
 const state = {
   events: [],
+  pbs: {},
   filter: "upcoming",
   view: "list",
   calMonth: startOfMonth(today()),
@@ -113,7 +122,19 @@ function demoStore() {
     try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
     listeners.forEach((cb) => cb([...data]));
   };
+  const PB_KEY = KEY + "-pbs";
+  let pbs;
+  try { pbs = JSON.parse(localStorage.getItem(PB_KEY)); } catch { pbs = null; }
+  if (!pbs) pbs = { "5k": { time: "22:48", note: "2026" }, "10k": { time: "47:31", note: "Stadtlauf 2026" }, "21k": { time: "1:52:10", note: "2025" } };
+  const pbListeners = [];
+
   return {
+    subscribePBs(cb) { pbListeners.push(cb); cb({ ...pbs }); },
+    async savePBs(next) {
+      pbs = next;
+      try { localStorage.setItem(PB_KEY, JSON.stringify(pbs)); } catch {}
+      pbListeners.forEach((cb) => cb({ ...pbs }));
+    },
     subscribe(cb) { listeners.push(cb); cb([...data]); },
     async add(ev) { data.push({ ...ev, id: "d" + Date.now() }); save(); },
     async update(id, ev) { data = data.map((e) => (e.id === id ? { ...e, ...ev } : e)); save(); },
@@ -136,7 +157,17 @@ async function firebaseStore() {
   const auth = au.getAuth(app);
   const col = fs.collection(db, "events");
 
+  const pbDoc = fs.doc(db, "meta", "pbs");
+
   return {
+    subscribePBs(cb) {
+      fs.onSnapshot(
+        pbDoc,
+        (snap) => cb(snap.exists() ? snap.data() : {}),
+        (err) => console.error(err)
+      );
+    },
+    savePBs(next) { return fs.setDoc(pbDoc, next); },
     subscribe(cb) {
       fs.onSnapshot(
         fs.query(col, fs.orderBy("date")),
@@ -158,6 +189,7 @@ async function firebaseStore() {
    ============================================================ */
 function render() {
   renderHero();
+  renderPBs();
   renderTabs();
   if (state.view === "list") renderList(); else renderCalendar();
   $("#add-btn").hidden = !state.isAdmin;
@@ -202,6 +234,58 @@ function renderHero() {
     [done.length, "Absolviert"],
     [fmtKm(Math.round(plannedKm)), "Wettkampf-km geplant"],
   ].map(([n, l]) => `<div class="stat"><b>${esc(n)}</b><span>${esc(l)}</span></div>`).join("");
+}
+
+function renderPBs() {
+  const el = $("#pbs");
+  const hasAny = PB_DISTANCES.some((d) => state.pbs[d.key]?.time);
+  el.hidden = !hasAny && !state.isAdmin;
+  $("#pb-edit").hidden = !state.isAdmin;
+  $("#pb-grid").innerHTML = PB_DISTANCES.map((d) => {
+    const pb = state.pbs[d.key] || {};
+    return `
+      <div class="pb ${pb.time ? "" : "empty-pb"}">
+        <span class="pb-dist">${esc(d.label)}</span>
+        <b class="pb-time">${esc(pb.time || "–")}</b>
+        <small class="pb-note">${esc(pb.note || d.sub || "")}</small>
+      </div>`;
+  }).join("");
+}
+
+function openPBForm() {
+  $("#pb-fields").innerHTML = PB_DISTANCES.map((d) => {
+    const pb = state.pbs[d.key] || {};
+    return `
+      <div class="pb-row">
+        <span class="pb-row-label">${esc(d.label)}</span>
+        <input name="time-${d.key}" value="${esc(pb.time || "")}" maxlength="12" placeholder="z. B. 1:45:12" inputmode="numeric" />
+        <input name="note-${d.key}" value="${esc(pb.note || "")}" maxlength="40" placeholder="Event / Jahr (optional)" />
+      </div>`;
+  }).join("");
+  $("#pb-dialog").showModal();
+}
+
+async function submitPBForm(e) {
+  e.preventDefault();
+  const f = e.target;
+  const next = {};
+  for (const d of PB_DISTANCES) {
+    const time = f[`time-${d.key}`].value.trim();
+    const note = f[`note-${d.key}`].value.trim();
+    if (time) next[d.key] = { time, note };
+  }
+  const btn = f.querySelector("[type=submit]");
+  btn.disabled = true;
+  try {
+    await store.savePBs(next);
+    $("#pb-dialog").close();
+    toast("Bestzeiten gespeichert 💪");
+  } catch (err) {
+    console.error(err);
+    toast("Speichern fehlgeschlagen – Regeln aktualisiert?");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderTabs() {
@@ -531,6 +615,8 @@ function bind() {
   $("#delete-btn").addEventListener("click", deleteCurrent);
   $("#auth-btn").addEventListener("click", handleAuthClick);
   $("#login-form").addEventListener("submit", submitLogin);
+  $("#pb-edit").addEventListener("click", openPBForm);
+  $("#pb-form").addEventListener("submit", submitPBForm);
 
   // Typen ins Dropdown
   $("#type-select").innerHTML = Object.entries(TYPES)
@@ -556,6 +642,7 @@ async function init() {
   }
   store.onAuth((user) => { state.user = DEMO ? null : user; updateAuthUI(user); });
   store.subscribe((events) => { state.events = events; render(); });
+  store.subscribePBs((pbs) => { state.pbs = pbs || {}; renderPBs(); });
 }
 
 init();

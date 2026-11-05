@@ -25,6 +25,12 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+     // Bestzeiten (Personal Bests)
+       match /meta/pbs {
+         allow read: if true;
+         allow write: if isOwner();
+       }
+
     // Alles andere ist gesperrt
     match /{document=**} {
       allow read, write: if false;
